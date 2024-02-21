@@ -273,20 +273,14 @@ public class CellBrowser extends AbstractCellTree implements ProvidesResize,
       String eventType = event.getType();
       if (BrowserEvents.KEYDOWN.equals(eventType) && !isKeyboardNavigationSuppressed()) {
         int keyCode = event.getKeyCode();
+        boolean isRtl = LocaleInfo.getCurrentLocale().isRTL();
+        keyCode = KeyCodes.maybeSwapArrowKeysForRtl(keyCode, isRtl);
         switch (keyCode) {
           case KeyCodes.KEY_LEFT:
-            if (LocaleInfo.getCurrentLocale().isRTL()) {
-              keyboardNavigateDeep();
-            } else {
-              keyboardNavigateShallow();
-            }
+            keyboardNavigateShallow();
             return;
           case KeyCodes.KEY_RIGHT:
-            if (LocaleInfo.getCurrentLocale().isRTL()) {
-              keyboardNavigateShallow();
-            } else {
-              keyboardNavigateDeep();
-            }
+            keyboardNavigateDeep();
             return;
         }
       }
@@ -1256,7 +1250,7 @@ public class CellBrowser extends AbstractCellTree implements ProvidesResize,
   private SafeHtml getImageHtml(ImageResource res) {
     // Right-justify image if LTR, left-justify if RTL
     AbstractImagePrototype proto = AbstractImagePrototype.create(res);
-    SafeHtml image = SafeHtmlUtils.fromTrustedString(proto.getHTML());
+    SafeHtml image = proto.getSafeHtml();
 
     SafeStylesBuilder cssBuilder = new SafeStylesBuilder();
     if (LocaleInfo.getCurrentLocale().isRTL()) {

@@ -16,6 +16,7 @@
 package com.google.gwt.user.cellview.client;
 
 import com.google.gwt.animation.client.Animation;
+import com.google.gwt.aria.client.Roles;
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.core.client.Scheduler;
 import com.google.gwt.dom.client.BrowserEvents;
@@ -38,14 +39,12 @@ import com.google.gwt.safecss.shared.SafeStyles;
 import com.google.gwt.safecss.shared.SafeStylesBuilder;
 import com.google.gwt.safehtml.client.SafeHtmlTemplates;
 import com.google.gwt.safehtml.shared.SafeHtml;
-import com.google.gwt.safehtml.shared.SafeHtmlUtils;
 import com.google.gwt.user.client.Event;
 import com.google.gwt.user.client.ui.AbstractImagePrototype;
 import com.google.gwt.user.client.ui.Focusable;
 import com.google.gwt.user.client.ui.HasAnimation;
 import com.google.gwt.user.client.ui.SimplePanel;
 import com.google.gwt.view.client.TreeViewModel;
-import com.google.gwt.aria.client.Roles;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -136,7 +135,7 @@ public class CellTree extends AbstractCellTree implements HasAnimation,
 
     /**
      * Set the duration of the animation in milliseconds.
-     * 
+     *
      * @param duration the duration in milliseconds
      * @see #getDuration()
      */
@@ -739,8 +738,8 @@ public class CellTree extends AbstractCellTree implements HasAnimation,
     final boolean isClick = BrowserEvents.CLICK.equals(eventType);
     final CellTreeNodeView<?> nodeView = findItemByChain(chain, 0, rootNode);
     if (nodeView != null) {
+      Element showMoreElem = nodeView.getShowMoreElement();
       if (isMouseDown) {
-        Element showMoreElem = nodeView.getShowMoreElement();
         if (!nodeView.isRootNode() && nodeView.getImageElement().isOrHasChild(target)) {
           // Open the node when the open image is clicked.
           nodeView.setOpen(!nodeView.isOpen(), true);
@@ -750,6 +749,9 @@ public class CellTree extends AbstractCellTree implements HasAnimation,
           nodeView.showMore();
           return;
         }
+      } else if (isClick && showMoreElem != null && showMoreElem.isOrHasChild(target)) {
+        // Prevents strict-CSP violation due to javascript:'' link target
+        event.preventDefault();
       }
 
       // Forward the event to the cell
@@ -776,7 +778,7 @@ public class CellTree extends AbstractCellTree implements HasAnimation,
    * <p>
    * Setting the key to (int) 0 will disable the access key.
    * </p>
-   * 
+   *
    * @see #getAccessKey()
    */
   public void setAccessKey(char key) {
@@ -819,6 +821,22 @@ public class CellTree extends AbstractCellTree implements HasAnimation,
 
   public void setFocus(boolean focused) {
     keyboardSelectedNode.setKeyboardSelected(true, true);
+  }
+
+  /**
+   * Sets the node that will be selected when the CellTree gains keyboard focus.
+   *
+   * @param parentNode a node in the tree that is currently open
+   * @param childIndex the index of the child to select
+   * @param stealFocus if true, also change keyboard focus to this CellTree.
+   */
+  public void setKeyboardSelectedTreeNode(TreeNode parentNode, int childIndex, boolean stealFocus) {
+    CellTreeNodeView nodeView = getCellTreeNodeView(parentNode);
+    // Just to ensure necessary checks are done, e.g.
+    //   assertNotDestroyed();checkChildBounds(childIndex);flush();
+    nodeView.getTreeNode().getChildValue(childIndex);
+
+    keyboardSelect(nodeView.getChildNode(childIndex), stealFocus);
   }
 
   public void setTabIndex(int index) {
@@ -890,6 +908,13 @@ public class CellTree extends AbstractCellTree implements HasAnimation,
    */
   CellTreeNodeView<?> getKeyboardSelectedNode() {
     return keyboardSelectedNode;
+  }
+
+  /**
+   * Returns the TreeNode that is selected when the CellTree has keyboard focus.
+   */
+  public TreeNode getKeyboardSelectedTreeNode() {
+    return keyboardSelectedNode == null ? null : keyboardSelectedNode.getTreeNode();
   }
 
   /**
@@ -974,6 +999,19 @@ public class CellTree extends AbstractCellTree implements HasAnimation,
     chain.add(hElem);
   }
 
+  private CellTreeNodeView getCellTreeNodeView(TreeNode treeNode) {
+    if (!(treeNode instanceof CellTreeNodeView.TreeNodeImpl)) {
+      throw new UnsupportedOperationException("Operation not supported for " + treeNode.getClass());
+    }
+
+    CellTreeNodeView nodeView = ((CellTreeNodeView.TreeNodeImpl) treeNode).getNodeView();
+    if (!nodeView.belongsToTree(this)) {
+      throw new IllegalArgumentException("The tree node does not belong to the tree.");
+    }
+
+    return nodeView;
+  }
+
   private CellTreeNodeView<?> findItemByChain(ArrayList<Element> chain,
       int idx, CellTreeNodeView<?> parent) {
     if (idx == chain.size()) {
@@ -997,7 +1035,7 @@ public class CellTree extends AbstractCellTree implements HasAnimation,
 
   /**
    * Get the HTML representation of an image.
-   * 
+   *
    * @param res the {@link ImageResource} to render as HTML
    * @param isTop true if the image is for a top level element.
    * @return the rendered HTML
@@ -1020,7 +1058,7 @@ public class CellTree extends AbstractCellTree implements HasAnimation,
     cssBuilder.appendTrustedString("height: " + res.getHeight() + "px;");
 
     AbstractImagePrototype proto = AbstractImagePrototype.create(res);
-    SafeHtml image = SafeHtmlUtils.fromTrustedString(proto.getHTML());
+    SafeHtml image = proto.getSafeHtml();
     return template
         .imageWrapper(classesBuilder.toString(), cssBuilder.toSafeStyles(), image);
   }
@@ -1030,11 +1068,14 @@ public class CellTree extends AbstractCellTree implements HasAnimation,
    *
    * @param keyCode the key code that was pressed
    */
-  private void handleKeyNavigation(int keyCode) {
+  //@VisibleForTesting
+  void handleKeyNavigation(int keyCode) {
     CellTreeNodeView<?> parent = keyboardSelectedNode.getParentNode();
     int parentChildCount = (parent == null) ? 0 : parent.getChildCount();
     int index = keyboardSelectedNode.getIndex();
     int childCount = keyboardSelectedNode.getChildCount();
+    boolean isRtl = LocaleInfo.getCurrentLocale().isRTL();
+    keyCode = KeyCodes.maybeSwapArrowKeysForRtl(keyCode, isRtl);
 
     switch (keyCode) {
       case KeyCodes.KEY_DOWN:
@@ -1069,7 +1110,7 @@ public class CellTree extends AbstractCellTree implements HasAnimation,
         if (index > 0) {
           // Deepest node of previous sibling hierarchy.
           CellTreeNodeView<?> prevSibling = parent.getChildNode(index - 1);
-          if (prevSibling.isOpen() && prevSibling.getChildCount() > 0) {
+          while (prevSibling.isOpen() && prevSibling.getChildCount() > 0) {
             prevSibling = prevSibling.getChildNode(prevSibling.getChildCount() - 1);
           }
           keyboardSelect(prevSibling, true);
@@ -1079,18 +1120,10 @@ public class CellTree extends AbstractCellTree implements HasAnimation,
         }
         break;
       case KeyCodes.KEY_RIGHT:
-        if (LocaleInfo.getCurrentLocale().isRTL()) {
-          keyboardNavigateShallow();
-        } else {
-          keyboardNavigateDeep();
-        }
+        keyboardNavigateDeep();
         break;
       case KeyCodes.KEY_LEFT:
-        if (LocaleInfo.getCurrentLocale().isRTL()) {
-          keyboardNavigateDeep();
-        } else {
-          keyboardNavigateShallow();
-        }
+        keyboardNavigateShallow();
         break;
     }
   }
