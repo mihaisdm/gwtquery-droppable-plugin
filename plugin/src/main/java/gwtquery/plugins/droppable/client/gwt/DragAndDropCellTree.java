@@ -39,7 +39,6 @@ import com.google.gwt.event.shared.GwtEvent.Type;
 import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.event.shared.SimpleEventBus;
 import com.google.gwt.user.cellview.client.CellTree;
-import com.google.gwt.user.cellview.client.CellTreeNodeView;
 import com.google.gwt.view.client.TreeViewModel;
 
 /**
@@ -105,11 +104,6 @@ public class DragAndDropCellTree extends CellTree {
     public <T> DragAndDropCellTree(TreeViewModel viewModel, T rootValue, Resources resources,
                         CellTreeMessages messages, int defaultNodeSize) {
         super(viewModel, rootValue, resources, messages, defaultNodeSize);
-    }
-
-    @Override
-    protected <T> CellTreeNodeView<T> createTreeNodeView(T rootValue, CellTreeMessages messages) {
-        return new DragAndDropCellTreeNodeView<T>(this, null, null, getElement(), rootValue, messages);
     }
 
     /*
